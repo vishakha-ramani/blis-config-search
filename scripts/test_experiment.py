@@ -2288,6 +2288,39 @@ class ProvenanceSplit(unittest.TestCase):
         self.assertIn("unrecorded", report.provenance_split([old, new]))
 
 
+class InfiniteGrace(unittest.TestCase):
+    """An agentic replay never cancels a request in flight at the end of the window. The
+    committed specs say so with `inf`, not with a number big enough to behave like it."""
+
+    def specs(self):
+        import glob
+        for path in sorted(glob.glob(os.path.join(E.ROOT, "experiments", "*.yaml"))):
+            with open(path, encoding="utf-8") as f:
+                yield os.path.basename(path), yaml.safe_load(f)
+
+    def test_every_replay_spec_states_inf_and_no_finite_stand_in_remains(self):
+        replays = [(n, d["scenario"]["replay"]) for n, d in self.specs()
+                   if (d["scenario"].get("replay") or {}).get("grace_period") is not None]
+        self.assertEqual(9, len(replays))
+        for name, rep in replays:
+            self.assertEqual("inf", rep["grace_period"], name)
+
+    def test_no_spec_carries_a_ten_year_comment_or_a_temporary_note(self):
+        import glob
+        for path in sorted(glob.glob(os.path.join(E.ROOT, "experiments", "*.yaml"))):
+            with open(path, encoding="utf-8") as f:
+                text = f.read()
+            self.assertNotIn("87600h", text, path)
+            self.assertNotIn("TEMPORARY", text, path)
+
+    def test_the_runner_asks_for_yaml_when_the_grace_is_infinite(self):
+        # The Result echoes the grace, and the stdout JSON of the pinned release has no infinity.
+        cmd = run_blis.build_replay_cmd("/b", None, None, "/sc", "s.yaml", 42, None, {},
+                                        {"scenario": "x", "corpus": "/c", "corpus_sha256": "a",
+                                         "grace_period": "inf"})
+        self.assertEqual("yaml", cmd[cmd.index("--format") + 1])
+
+
 class BasisAndScope(unittest.TestCase):
     """A report states the basis and scope of every ranked figure (CFG-4, DEV-8)."""
 
